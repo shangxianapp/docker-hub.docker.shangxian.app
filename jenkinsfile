@@ -1,0 +1,84 @@
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+    }
+
+    stages {
+        // stage('Clone') {
+        //     steps {
+        //         checkout changelog: false, poll: false, scm: [$class: 'GitSCM', branches: [[name: '*/master']], doGenerateSubmoduleConfigurations: false, extensions: [], submoduleCfg: [], userRemoteConfigs: [[credentialsId: 'shangxianapp-github-xuexb-ssh-key', url: 'git@github.com:shangxianapp/docker-hub.docker.shangxian.app.git']]]
+        //     }
+        // }
+
+        stage('Docker Compose') {
+            steps {
+                sshPublisher(
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: 'sg02', 
+                            transfers: [
+                                sshTransfer(
+                                    cleanRemote: false, 
+                                    excludes: '', 
+                                    execCommand: 'cd $WWWROOT_DIR/hub.docker.shangxian.app && docker-compose up -d --force-recreate', 
+                                    execTimeout: 120000, 
+                                    flatten: false, 
+                                    makeEmptyDirs: false, 
+                                    noDefaultExcludes: false, 
+                                    patternSeparator: '[, ]+', 
+                                    remoteDirectory: "$WWWROOT_DIR/hub.docker.shangxian.app", 
+                                    remoteDirectorySDF: false, 
+                                    removePrefix: '', 
+                                    sourceFiles: 'docker-compose.yml, nginx.htpasswd'
+                                )
+                            ], 
+                            usePromotionTimestamp: false, 
+                            useWorkspaceInPromotion: false, 
+                            verbose: true
+                        )
+                    ]
+                )
+            }
+        }
+
+        stage('Reload nginx') {
+            steps {
+                sh "mv nginx.conf hub.docker.shangxian.app.conf"
+                sshPublisher(
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: 'sg02', 
+                            transfers: [
+                                sshTransfer(
+                                    cleanRemote: false, 
+                                    excludes: '', 
+                                    execCommand: "/bin/sh $DOCKER_NGINX_DIR/reload.sh", 
+                                    execTimeout: 120000, 
+                                    flatten: false, 
+                                    makeEmptyDirs: false, 
+                                    noDefaultExcludes: false, 
+                                    patternSeparator: '[, ]+', 
+                                    remoteDirectory: "$DOCKER_NGINX_VHOST_DIR", 
+                                    remoteDirectorySDF: false, 
+                                    removePrefix: '', 
+                                    sourceFiles: 'hub.docker.shangxian.app.conf'
+                                )
+                            ], 
+                            usePromotionTimestamp: false, 
+                            useWorkspaceInPromotion: false, 
+                            verbose: true
+                        )
+                    ]
+                )
+            }
+        }
+    }
+
+    post {
+        always {
+            deleteDir()
+        }
+    }
+}
